@@ -1,0 +1,99 @@
+clear;clc;close all
+format 'long'
+%Deluppgift A 
+
+% INITALL VILKORD OCH UPPSTÄLLNING 
+
+%Konstanter och likanande
+m = 0.057;                          % massan m = 57 gram = 57*10^-3 kg 
+K = 0.001;                          % luftmotstånds konstant 
+g = 9.82;                           % g = 9.82N/kg = 9.82 m/(s^2).
+
+
+%initiell position och tid
+x0 = 0;         % start x-koordinat = 0 m
+y0 = 2.5;       % start y-koordinat = 2.5 m
+t = 0;          % start tid = 0 sek      
+
+% hastighet, riktning
+v = 55.5555556;                       % starthastigheten v0 =200 km/h = 55.5555556 m/s 
+theta = -6;                           % vinkeln Θ = -6 grader ( från horisontalplanet)
+vx0= v*cosd(theta);                   % hastighet i x-led 
+vy0 = v*sind(theta);                   % hastighet i y.led 
+
+
+
+%Ekvations system
+dudv=@(u)[
+    u(2); -(K/m)*u(2)*(sqrt(u(2)^2+u(4)^2));        % u(2): acceleration i x-led 
+    u(4); -g-(K/m)*u(4)*(sqrt(u(2)^2+u(4)^2))       % u(4): acceleration i y-led
+         ];
+
+
+
+%iterare grejor
+delta_t = 0.0001;                       % steglängden på förändring i tid, fungerar som en steglängd
+n=1;                                    % Inkrementerare, n är antalet iterationer för rk4
+uv(:, 1)=[x0; vx0; y0; vy0]; 
+%DIFFERTENTIAL EKVATIONS LÖSARE
+
+% Runge kutta metoden med steglängd dt
+while uv(3, end) > 0.0001
+    n=n+1;
+    t(end+1)=t(end)+delta_t;
+    k1 = dudv( uv(:,end) ); 
+    k2 = dudv( uv(:,end) + delta_t*.5*k1 );
+    k3 = dudv( uv(:,end) + delta_t*.5*k2 );
+    k4 = dudv( uv(:,end) + delta_t*k3 );
+    uv(:,end+1) = uv(:,end) + delta_t*( k1 + 2*k2 + 2*k3 + k4 )/6;
+end
+
+
+
+
+
+
+%INTERPOLATION
+%1. PUNKTER 
+% Punkter med steglängd dt 
+x_1 = uv(1,end-1); x_2= uv(1,end);
+y_1 = uv(3,end-1); y_2 = uv(3,end);
+
+%2. UPPSTÄLLNINGS BERÄKNINGAR 
+% y = k*x + m med steglängden dt
+k = (y_2 - y_1)/(x_2 - x_1);        % lutningskoefficent
+m = y_2 - k*x_2;                    % konstant för linje 
+
+
+
+%3. INTERPLATIONSPUNKT BERÄKNINGAR 
+% Tar fram x värden då y = 0
+y_interp=0;                %kommer blir 0 när bollen slår i marken
+x_interp=y_interp/k-m/k;          %interpolerade x värdet med dt-steg då y = 0
+
+%disp(Etrunk_LinjInterp);
+% Linjer i syfte av att plotta interpolationen 
+x = 14.5:0.1:15.5;
+y1 = k*x+m;
+ 
+
+
+%PLOTTAR 
+
+% Plottar x- respk y- axel och enheter på x- respk. y- axel 
+xlabel("avstånd (meter)");  xline(0); hold on
+ylabel("höjd (meter)");     yline(0); hold on
+    
+
+% Plottar 'planen' 
+plot([0,23.77],[0,0],'LineWidth',1.5); hold on
+
+% Plottar 'nätet'
+plot([11.855,11.855],[0,0.914],'black' ); hold on
+
+
+% Plottar fjäderbollens kastbana med steglängd dt och 2*dt
+plot(uv(1,:),uv(3,:),'Color','red'); hold on
+
+% Plottar linjär med steglängd dt och 2*dt
+plot(x,y1,'black'); hold on 
