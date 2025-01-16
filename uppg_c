@@ -1,0 +1,224 @@
+clear;clc;close all
+format 'long'
+% Main code
+
+% Initial parameters
+x_target = 11.885;  % Distance to the net (m)
+y_target = 1;   % Height of the ball above the net (m)
+
+% Call the secant method to find the optimal angle
+[theta, x_result, y_result] = sekant_metod(0, 50, x_target, y_target);
+
+% Plot the trajectory
+plot_trajectory(x_result, y_result);
+
+% Display results
+%disp("Optimal Angle (degrees): " + theta);
+%disp("Landing point first bounce: " + x_result(end) + " m");
+%disp("Height at back wall: " + y_result + " m");
+
+%% Functions
+
+% Secant method to find optimal angle
+function [theta, x, y] = sekant_metod(a, b, x_target, y_target)
+    % Inputs:
+    % a, b       - Initial angle guesses (degrees)
+    % x_target   - Target x-coordinate for height constraint
+    % y_target   - Desired height at x_target
+
+    % Initial conditions
+    x0 = 0;
+    y0 = 2.5;         % Initial height (m)
+    v0 = 55.56;       % Initial velocity (m/s)
+    tol = 1e-6;       % Tolerance for the secant method
+
+    % Iterative secant method
+    while abs(b - a) > tol
+        % Solve with RK4 for angle 'a'
+        [xa, ya] = trajectory_with_bounce(a, x0, y0, v0); 
+        ya_net = tredje_int(xa, ya, x_target);
+        %ya_net = lin_interpolation(xa, ya, x_target) % Height at net
+       
+        % Solve with RK4 for angle 'b'
+        [xb, yb] = trajectory_with_bounce(b, x0, y0, v0);
+        yb_net=tredje_int(xb, yb, x_target);
+        %yb_net = lin_interpolation(xb, yb, x_target) 
+        
+        % Update the secant method
+        c = b - (yb_net - y_target) * (b - a) / (yb_net - ya_net);
+        a = b;
+        b = c;
+    end
+
+    % Return final angle and trajectory
+    theta = b;
+    [x, y] = trajectory_with_bounce(theta, x0, y0, v0);
+    %[x_res,y_res]=closest_points(x,y,23.77);
+     %x=x_res(3);
+     %y=y_res(3);
+    
+end
+
+% Function to calculate the trajectory with bounce handling (using recursion)
+function [x, y] = trajectory_with_bounce(theta, x0, y0, v0)
+    % Initial velocity components
+    vx0 = v0 * cosd(theta);
+    vy0 = v0 * sind(theta);
+
+    % Initial state vector [x, vx, y, vy]
+    u = [x0; vx0; y0; vy0];
+
+    % Solve using RK4 with bounce handling
+    n = 1000; % Number of time steps
+    t0 = 0;
+    t_end = 1; % Simulation time (s)
+    %h = (t_end - t0) / n;
+    h=0.0001;
+   
+    % Initialize arrays for storing results
+    x = [];
+    y = [];
+
+    % Handle bounces with recursion
+    while u(1)<=23.77
+        x_bounce = zeros(1, n + 1);
+        y_bounce = zeros(1, n + 1);
+
+        x_bounce(1) = u(1);
+        y_bounce(1) = u(3);
+
+        for i = 1:n
+            
+            k1 = h *diff_ekv(u);% 
+            k2 = h * diff_ekv(u + 0.5 * k1);
+            k3 = h * diff_ekv(u + 0.5 * k2);
+            k4 = h * diff_ekv(u + k3);
+
+            u = u + (k1 + 2 * k2 + 2 * k3 + k4) / 6;
+
+            x_bounce(i + 1) = u(1);
+            y_bounce(i + 1) = u(3);
+            % Stop if ball hits the ground
+           
+            
+            
+                if u(3) < 0
+                    % Reverse velocity
+                    
+                    u(3) = 0;    
+                    theta = abs(asind(u(4)/(sqrt(u(2)^2 + u(4)^2))));
+                    u(4) = -u(4); 
+                    
+
+                    % Recursively call the function to simulate the next bounce
+                    [x_next, y_next] = trajectory_with_bounce(theta, u(1), u(3), sqrt(u(2)^2 + u(4)^2));
+                    
+                    % Concatenate the current trajectory with the next one
+                    x = [x, x_bounce(1:i), x_next];
+                    y = [y, y_bounce(1:i), y_next];
+                    return;  % Exit after handling the bounce and recursing   
+                    
+               end
+                
+        end
+         % If no bounce occurs, break out of the loop
+        x = [x, x_bounce(1:i)];
+        y = [y, y_bounce(1:i)];
+   end
+
+       
+         
+end
+
+
+% Function for differential equations of projectile motion with air resistance
+function diff_ekv = diff_ekv(u)
+    % Differential equations for projectile motion with air resistance
+    parameter=struct('g', 9.82, 'm', 0.057, 'K', 0.001, 'Studs_limit', 15);
+    vx = u(2);
+    vy = u(4);
+   
+    ax = -(parameter.K / parameter.m) * vx * sqrt(vx^2 + vy^2);
+    ay = -parameter.g - (parameter.K / parameter.m) * vy * sqrt(vx^2 + vy^2);
+
+    diff_ekv = [vx; ax; vy; ay];
+end
+
+function plot_trajectory(x_val, y_val)
+%plottar trajektion
+    % Plottar x- and y-axeln med enheter
+    xlabel("Distans (meter)"); xline(0); hold on
+    ylabel("Höjd (meter)"); yline(0); hold on
+
+    % Plottar planet
+    plot([0, 23.770], [0, 0], 'blue','LineWidth', 1.5 ); hold on
+    % Plottar nätet
+    plot([11.885, 11.885], [0, 0.914], 'k'); % Nätet
+    plot(x_val, y_val, 'Color', 'red'); % flygbanan
+    hold off; % bara en plot 
+end
+
+function y_int=tredje_int(xa,ya, x_target)
+    [x,y]=closest_points(xa,ya,x_target);
+  % Select the four closest points around x_target
+    % (For simplicity, we'll use the first four points, assuming xa is sorted)
+    x1 = x(1);
+    x2 = x(2);
+    x3 = x(3);
+    x4 = x(4);
+    
+    y1 = y(1);
+    y2 = y(2);
+    y3 = y(3);
+    y4 = y(4);
+    
+    % Calculate the coefficients of the cubic polynomial using Lagrange
+    L1 = ((x_target - x2) * (x_target - x3) * (x_target - x4)) / ((x1 - x2) * (x1 - x3) * (x1 - x4));
+    L2 = ((x_target - x1) * (x_target - x3) * (x_target - x4)) / ((x2 - x1) * (x2 - x3) * (x2 - x4));
+    L3 = ((x_target - x1) * (x_target - x2) * (x_target - x4)) / ((x3 - x1) * (x3 - x2) * (x3 - x4));
+    L4 = ((x_target - x1) * (x_target - x2) * (x_target - x3)) / ((x4 - x1) * (x4 - x2) * (x4 - x3));
+    
+    % Interpolated y value
+    y_int = L1 * y1 + L2 * y2 + L3 * y3 + L4 * y4;
+end
+
+function y_int=lin_interpolation(x_values, y_values, x_target)
+    [x,y]=closest_points(x_values, y_values, x_target)
+
+    % Styckvis Linjär interplation - här gör vi en linjär
+    % interplation i punkterna s tog fram i x och y led 
+    %x_1 = x_values(end-1); x_2= x_values(end);
+    %y_1 = y_values(end-1); y_2 = y_values(end);
+    x_1=x(2); x_2=x(3);
+    y_1=y(2); y_2=y(3);
+    y_int=y_1+(x_target-x_1)*(y_2-y_1)/(x_2-x_1);
+end
+
+function [x,y]= closest_points(xa,ya,x_target)
+  %x_smaller=[]; y_smaller=[];
+  %x_bigger=[]; y_bigger=[];
+  x=[];
+  y=[];
+
+  % Loop through the xa to find the closest points smaller and larger than x_target
+    for i = 1:length(xa)
+        if xa(i) < x_target
+            % Store the two closest points that are smaller than x_target
+            if length(x) < 2
+                x = [x, xa(i)];
+                y= [y, ya(i)];
+            end
+        elseif xa(i) > x_target
+            % Store the two closest points that are larger than x_target
+            if length(x) < 4
+                x = [x, xa(i)];
+                y = [y, ya(i)];
+            end
+        end
+        
+        % Stop once we have the two points for both smaller and larger
+        if length(x) == 4 
+            break;
+        end
+    end
+end
